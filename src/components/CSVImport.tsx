@@ -20,22 +20,58 @@ export function CSVImport() {
           if (results.errors.length > 0) {
             throw new Error('Error parsing CSV file');
           }
-
           const transactions = results.data
           .filter((row: any) => row.date && row.description && row.amount)
           .map((row: any) => {
             // Convert date to YYYY-MM-DD format
             let dateValue;
             try {
-              const dateParts = row.date.split('/');
-              if (dateParts.length === 3) {
-                // If date is in MM/DD/YYYY format
-                dateValue = `${dateParts[2]}-${dateParts[0].padStart(2, '0')}-${dateParts[1].padStart(2, '0')}`;
+              // First, log the original date format
+              console.log("Original date from CSV:", row.date);
+              
+              // Check if the date contains slashes (MM/DD/YYYY)
+              if (row.date.includes('/')) {
+                const dateParts = row.date.split('/');
+                // Ensure we have month, day, year
+                if (dateParts.length === 3) {
+                  // MM/DD/YYYY to YYYY-MM-DD
+                  const month = dateParts[0].padStart(2, '0');
+                  const day = dateParts[1].padStart(2, '0');
+                  const year = dateParts[2].length === 2 ? `20${dateParts[2]}` : dateParts[2];
+                  dateValue = `${year}-${month}-${day}`;
+                }
+              } else if (row.date.includes('-')) {
+                // If it's already in YYYY-MM-DD format, validate it
+                const dateParts = row.date.split('-');
+                if (dateParts.length === 3 && dateParts[0].length === 4) {
+                  // Already in YYYY-MM-DD format
+                  dateValue = row.date;
+                } else {
+                  // Might be DD-MM-YYYY or MM-DD-YYYY
+                  const month = dateParts[1].padStart(2, '0');
+                  const day = dateParts[0].padStart(2, '0');
+                  const year = dateParts[2].length === 2 ? `20${dateParts[2]}` : dateParts[2];
+                  dateValue = `${year}-${month}-${day}`;
+                }
               } else {
-                // Try to parse as a date object
+                // Try other date formats using Date object
                 const date = new Date(row.date);
-                dateValue = date.toISOString().split('T')[0];
+                if (!isNaN(date.getTime())) {
+                  dateValue = date.toISOString().split('T')[0];
+                } else {
+                  throw new Error("Couldn't parse date format");
+                }
               }
+              
+              // Log the converted date
+              console.log("Converted date format:", dateValue);
+              
+              // Verify with a Date object
+              const validDate = new Date(dateValue);
+              if (isNaN(validDate.getTime())) {
+                throw new Error("Converted date is invalid");
+              }
+              
             } catch (e) {
               console.error('Error parsing date:', row.date, e);
               return null;
@@ -54,6 +90,16 @@ export function CSVImport() {
           if (transactions.length === 0) {
             throw new Error('No valid transactions found in CSV');
           }
+
+// Debug before sending to Supabase
+console.log("First few transactions to insert:", transactions.slice(0, 3));
+
+// Check if any transaction has an invalid date format
+const invalidDates = transactions.filter(t => t && t.date && !t.date.match(/^\d{4}-\d{2}-\d{2}$/));
+if (invalidDates.length > 0) {
+  console.error("Found transactions with invalid date format:", invalidDates);
+  throw new Error("Some transactions have invalid date formats");
+}
 
           const { error } = await supabase
             .from('transactions')
