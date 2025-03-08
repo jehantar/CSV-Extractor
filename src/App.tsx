@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react'; // Import useCallback
 import Papa from 'papaparse';
 import { Upload, Download } from 'lucide-react';
+import { CSVImport } from './components/CSVImport';  // Import CSVImport
 
 function App() {
   const [rawData, setRawData] = useState<string[][]>([]);
@@ -18,30 +19,21 @@ function App() {
     Papa.parse(file, {
       complete: (results) => {
         setRawData(results.data as string[][]);
-        processData(results.data as string[][], columnMapping);
+        // Don't call processData directly here anymore
+        //Instead just update the RawData and have the CSVImport component handle it.
       },
       header: false,
       skipEmptyLines: true
     });
   };
 
-  const processData = (data: string[][], mapping: typeof columnMapping) => {
-    const processed = data
-      .filter(row => row.length >= Math.max(mapping.date, mapping.description, mapping.amount) + 1)
-      .map(row => ({
-        date: row[mapping.date],
-        description: row[mapping.description],
-        amount: row[mapping.amount]
-      }));
-    setProcessedData(processed);
-  };
+  // This is the important part:  We're *removing* your processData
+  // and relying on the CSVImport component to do the processing
 
   const handleColumnChange = (field: keyof typeof columnMapping, value: string) => {
     const newMapping = { ...columnMapping, [field]: parseInt(value) };
     setColumnMapping(newMapping);
-    if (rawData.length > 0) {
-      processData(rawData, newMapping);
-    }
+    //Removed the processData call. It isn't neccessary anymore.
   };
 
   const downloadCSV = () => {
@@ -51,7 +43,7 @@ function App() {
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
-    
+
     link.setAttribute('href', url);
     link.setAttribute('download', 'processed_transactions.csv');
     link.style.visibility = 'hidden';
@@ -65,16 +57,16 @@ function App() {
       <div className="max-w-2xl mx-auto">
         <div className="bg-white p-8 rounded-lg shadow">
           <h1 className="text-2xl font-bold text-center mb-8">CSV Converter</h1>
-          
+
           <div className="space-y-6">
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
               <label className="cursor-pointer inline-flex flex-col items-center">
                 <Upload className="w-8 h-8 text-gray-400 mb-2" />
                 <span className="text-sm text-gray-500">Upload CSV file</span>
-                <input 
-                  type="file" 
-                  className="hidden" 
-                  accept=".csv" 
+                <input
+                  type="file"
+                  className="hidden"
+                  accept=".csv"
                   onChange={handleFileUpload}
                 />
               </label>
@@ -93,13 +85,21 @@ function App() {
                         onChange={(e) => handleColumnChange(field, e.target.value)}
                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
                       >
-                        {rawData[0].map((_, index) => (
+                        {rawData[0]?.map((_, index) => (  // Check if rawData[0] exists before mapping
                           <option key={index} value={index}>Column {index + 1}</option>
                         ))}
                       </select>
                     </div>
                   ))}
                 </div>
+
+                {/* Integrate the CSVImport component here */}
+                <CSVImport
+                  rawData={rawData}
+                  columnMapping={columnMapping}
+                  setProcessedData={setProcessedData}  //Pass the setProcessedData function
+                />
+
 
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
@@ -121,7 +121,7 @@ function App() {
                     </tbody>
                   </table>
                 </div>
-                
+
                 <button
                   onClick={downloadCSV}
                   className="w-full flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
