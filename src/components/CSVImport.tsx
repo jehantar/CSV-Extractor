@@ -22,14 +22,34 @@ export function CSVImport() {
           }
 
           const transactions = results.data
-            .filter((row: any) => row.date && row.description && row.amount)
-            .map((row: any) => ({
-              date: row.date,
+          .filter((row: any) => row.date && row.description && row.amount)
+          .map((row: any) => {
+            // Convert date to YYYY-MM-DD format
+            let dateValue;
+            try {
+              const dateParts = row.date.split('/');
+              if (dateParts.length === 3) {
+                // If date is in MM/DD/YYYY format
+                dateValue = `${dateParts[2]}-${dateParts[0].padStart(2, '0')}-${dateParts[1].padStart(2, '0')}`;
+              } else {
+                // Try to parse as a date object
+                const date = new Date(row.date);
+                dateValue = date.toISOString().split('T')[0];
+              }
+            } catch (e) {
+              console.error('Error parsing date:', row.date, e);
+              return null;
+            }
+        
+            return {
+              date: dateValue,
               description: row.description,
               amount: parseFloat(row.amount),
               category: 'Uncategorized',
               account: file.name.split('.')[0]
-            }));
+            };
+          })
+          .filter(Boolean); // Remove any null entries from failed date parsing
 
           if (transactions.length === 0) {
             throw new Error('No valid transactions found in CSV');
